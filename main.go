@@ -12,6 +12,7 @@ import (
 	"text/template"
 )
 
+var version string
 const defaultConfigPath = "/etc/wrapslack.yaml"
 
 func main() {
@@ -22,6 +23,9 @@ func main() {
 
 func start() error {
 	flags := []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "version",
+		},
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "slack-token",
 			EnvVars: []string{"SLACK_TOKEN"},
@@ -69,6 +73,11 @@ func start() error {
 }
 
 func action(c *cli.Context) error {
+	if c.Bool("version") {
+		fmt.Printf("wrapslack %s\n", version)
+		return nil
+	}
+
 	slackToken := c.String("slack-token")
 	if slackToken == "" {
 		return fmt.Errorf("slack-token is required")
