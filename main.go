@@ -9,6 +9,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"text/template"
 )
 
@@ -45,15 +47,15 @@ func start() error {
 			Name:  "slack-username",
 			Value: "wrapslack",
 		}),
-		altsrc.NewInt64SliceFlag(&cli.Int64SliceFlag{
-			Name:  "notify-exit-code",
-			Value: cli.NewInt64Slice(),
-			Usage: "Exit status codes to notify to Slack",
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:  "notify-exit-codes",
+			Value: "",
+			Usage: "Comma-separated exit status codes to notify to Slack (empty '' for all status)",
 		}),
-		altsrc.NewInt64SliceFlag(&cli.Int64SliceFlag{
-			Name:  "ignore-exit-code",
-			Value: cli.NewInt64Slice(0),
-			Usage: "Exit status codes not to notify to Slack",
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:  "ignore-exit-codes",
+			Value: "0",
+			Usage: "Comma-separated exit status codes not to notify to Slack",
 		}),
 	}
 
@@ -97,6 +99,16 @@ func action(c *cli.Context) error {
 		return err
 	}
 
+	ignoreCodes, err := parseCommaSeparatedToInts(c.String("ignore-exit-codes"))
+	if err != nil {
+		return err
+	}
+
+	notifyCodes, err := parseCommaSeparatedToInts(c.String("notify-exit-codes"))
+	if err != nil {
+		return err
+	}
+
 	// Run a command
 
 	args := c.Args().Slice()
@@ -105,25 +117,26 @@ func action(c *cli.Context) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stdout
 
-	var exitCode int64
+	var exitCode int
 	exitCode = -1
 
 	if err := cmd.Run(); err != nil {
 		if eerr, ok := err.(*exec.ExitError); ok {
-			exitCode = int64(eerr.ExitCode())
+			exitCode = eerr.ExitCode()
 		}
 	} else {
 		exitCode = 0
 	}
 
-	for _, i := range c.Int64Slice("ignore-exit-code") {
+	for _, i := range ignoreCodes {
 		if i == exitCode {
 			return nil
 		}
 	}
-	if codes := c.Int64Slice("notify-exit-code"); len(codes) > 0 {
+
+	if len(notifyCodes) > 0 {
 		notify := false
-		for _, i := range codes {
+		for _, i := range notifyCodes {
 			if i == exitCode {
 				notify = true
 				break
@@ -164,4 +177,20 @@ func action(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+func parseCommaSeparatedToInts(str string) ([]int, error) {
+	var ints []int
+	if str == "" {
+		return ints, nil
+	}
+
+	for _, s := range strings.Split(str, ",") {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, err
+		}
+		ints = append(ints, i)
+	}
+	return ints, nil
 }
